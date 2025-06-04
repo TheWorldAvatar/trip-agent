@@ -19,19 +19,19 @@ API route:
         <http://abc> <https://www.theworldavatar.com/kg/ontotimeseries/hasTimeSeries> <time_series>
         ```
 
-    2) upperbound
-       - Time filter used to query time series
+    2) upperbound (optional)
+       - Time filter used to query time series, maximum time in the time series will be used if not provided
 
-    3) lowerbound
-       - Time filter used to query time series  
+    3) lowerbound (optional)
+       - Time filter used to query time series, minimum time in the time series will be used if not provided
 
-    Format for upperbound and lowerbound depends on the instantiated time series table, tested with epoch seconds and java.time.Instant. In principle, it should work for any Java time classes with the "parse" method, e.g. ZonedDateTime.
+    Format for upperbound and lowerbound depends on the instantiated time series table, tested with epoch seconds/milliseconds and java.time.Instant. In principle, it should work for any Java time classes with the "parse" method, e.g. ZonedDateTime.
 
-## Instantiation of trips and visits
+## Instantiation of trips
 
 Trip detection code is adapted from <https://github.com/TeamINTERACT/trip_detection/tree/master>.
 
-The input should be a time series of points:
+The input should contain a time series of points:
 
 Time | Location
 -- | --
@@ -42,31 +42,36 @@ Time | Location
 
 The raw data must contain at least a visit in order for the trip detection module to work (staying within an area over a certain period).
 
-The agent will check for the existence of trip and visit, if they do not exist, they will be instantiated and share the same time series with the point time series. Existing triples before calculations:
+The agent will check for the existence of a trip instance, if it does not exist, it will be instantiated and share the same time series with the point time series. Only one trip instance is allowed per point time series. Existing triples before calculations:
 
 ```sparql
 <http://abc> <https://www.theworldavatar.com/kg/ontotimeseries/hasTimeSeries> <time_series>
 ```
 
-New triples showing trip and visit sharing the same time series:
+New triples showing trip sharing the same time series:
 
 ```sparql
 PREFIX twa: <https://www.theworldavatar.com/kg/>
 
 <trip_iri> rdf:type twa:Trip; <https://www.theworldavatar.com/kg/ontotimeseries/hasTimeSeries> <time_series>.
-<visit_iri> rdf:type twa:Visit; <https://www.theworldavatar.com/kg/ontotimeseries/hasTimeSeries> <time_series>.
 ```
 
 Indices of trips and visits are added to the existing point time series:
 
-Time | Location | Visit | Trip
--- | -- | -- | --
-1 | POINT(1,2) | 1| 0
-2 | POINT(3,4) | 1| 0
-3 | POINT(5,6) | 0| 1
-4 | POINT(7,8) | 0| 1
+Time | Location | Trip
+-- | -- | --
+1 | POINT(1,2) | 0
+2 | POINT(3,4) | 0
+3 | POINT(5,6) | 1
+4 | POINT(7,8) | 1
 
-The subject will be either in a visit (trip = 0) or in a trip (visit = 0).
+The subject will be either in a trip (trip != 0) or a visit (trip = 0).
+
+## Warning
+
+Each time the agent is called, results will be overwritten if values already exist in the time series table. Also, results are likely to change if a different time bound is used, therefore it is not recommended to execute this agent with overlapping time bounds for the same trajectory.
+
+Ideally new set of results should be instantiated for each combination of parameters but it will quickly go out of hand given the number of parameters available in the module.
 
 ## Development guide
 
