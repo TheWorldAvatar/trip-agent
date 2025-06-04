@@ -4,7 +4,7 @@ from twa import agentlogging
 import pandas as pd
 from pandas._libs.tslibs.np_datetime import OutOfBoundsDatetime
 from agent.trip.utilities import wgs_to_utm_code
-from agent.trip.trip_detection import detect_trips, CH_TRIP_INDEX, CH_VISIT_INDEX
+from agent.trip.trip_detection import detect_trips, CH_TRIP_INDEX
 from py4j.java_gateway import JavaObject
 from agent.trip.kg_client import KgClient
 from agent.utils.baselib_gateway import baselib_view, jpsBaseLibGW
@@ -70,27 +70,26 @@ def api():
         logger.error(err_msg)
         raise
 
-    trip, visit = kg_client.get_trip_and_visit(iri)
+    trip = kg_client.get_trip(iri)
 
     if trip is None:
         logger.info('Trip does not exist, instantiating')
-        trip, visit = kg_client.instantiate_trip_and_visit()
+        trip = kg_client.instantiate_trip()
         time_series_iri = kg_client.get_time_series_iri(iri)
         time_series_client.add_columns(time_series_iri=time_series_iri, data_iri=[
-            trip, visit], class_list=[baselib_view.java.lang.Integer.TYPE] * 2)
+            trip], class_list=[baselib_view.java.lang.Integer.TYPE])
 
     # py4j requires python native int, pandas array won't work
     trip_list_int = [int(x) for x in detected_gps[CH_TRIP_INDEX]]
-    visit_list_int = [int(x) for x in detected_gps[CH_VISIT_INDEX]]
 
-    # create time series object for trip and visit data for upload to time series database
+    # create time series object for upload to time series database
     time_series_trip_visit = time_series_client.create_time_series(times=time_series_trajectory.getTimes(
-    ), data_iri_list=[trip, visit], values=[trip_list_int, visit_list_int])
+    ), data_iri_list=[trip], values=[trip_list_int])
 
     # upload to database
     time_series_client.add_time_series(time_series=time_series_trip_visit)
 
-    return 'Added trip and visit data'
+    return 'Added trip data'
 
 
 def convert_time_series_to_dataframe(time_series, point_iri: str):
