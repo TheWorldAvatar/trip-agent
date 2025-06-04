@@ -4,7 +4,6 @@ import uuid
 
 PREFIX = 'https://www.theworldavatar.com/kg/'
 TRIP = PREFIX + 'Trip'
-VISIT = PREFIX + 'Visit'
 TIMESERIES_NAMESPACE = 'https://www.theworldavatar.com/kg/ontotimeseries/'
 HAS_TIME_SERIES = TIMESERIES_NAMESPACE + 'hasTimeSeries'
 TIMESERIES_TYPE = TIMESERIES_NAMESPACE + 'TimeSeries'
