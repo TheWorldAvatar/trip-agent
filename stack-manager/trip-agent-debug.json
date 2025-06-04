@@ -3,7 +3,7 @@
         "Name": "trip-agent",
         "TaskTemplate": {
             "ContainerSpec": {
-                "Image": "trip-agent-debug:1.0",
+                "Image": "trip-agent-debug:1.0.0",
                 "Env": [
                     "NAMESPACE=kb",
                     "DATABASE=postgres"
