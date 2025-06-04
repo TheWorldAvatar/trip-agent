@@ -50,8 +50,7 @@ class KgClient():
         trip = PREFIX + 'trip/' + str(uuid.uuid4())
         visit = PREFIX + 'visit/' + str(uuid.uuid4())
         query = f"""
-        INSERT {{<{trip}> a <{TRIP}>. <{visit}> a <{VISIT}>}}
-        WHERE {{}}
+        INSERT DATA {{<{trip}> a <{TRIP}>. <{visit}> a <{VISIT}>}}
         """
         self.remote_store_client.executeUpdate(query)
         return trip, visit
