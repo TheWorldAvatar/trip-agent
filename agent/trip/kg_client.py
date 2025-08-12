@@ -2,7 +2,7 @@ from agent.utils.baselib_gateway import baselib_view
 from agent.utils.stack_configs import BLAZEGRAPH_URL
 import uuid
 
-PREFIX = 'https://www.theworldavatar.com/kg/'
+PREFIX = 'https://www.theworldavatar.com/kg/ontoexposure/'
 TRIP = PREFIX + 'Trip'
 TIMESERIES_NAMESPACE = 'https://www.theworldavatar.com/kg/ontotimeseries/'
 HAS_TIME_SERIES = TIMESERIES_NAMESPACE + 'hasTimeSeries'
