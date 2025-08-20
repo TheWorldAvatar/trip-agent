@@ -1,6 +1,6 @@
 # Trip agent
 
-This agent processes time series of points to produce trips and visits.
+This agent processes time series of points to produce trips and visits. It is designed to be deployed on <https://github.com/TheWorldAvatar/hd4-stack>.
 
 API route:
 
@@ -87,7 +87,7 @@ Use [docker-compose-debug.yml](docker-compose-debug.yml) to build a debug versio
 docker compose -f docker-compose-debug.yml build
 ```
 
-and use [stack-manager/trip-agent-debug.json](stack-manager/trip-agent-debug.json) to spin up the debug container. To attach using VS code, use the following config in launch.json:
+and use <https://github.com/TheWorldAvatar/hd4-stack/blob/main/stack-manager/inputs/config/services/trip-agent-debug.json> to spin up the debug container. To attach using VS code, use the following config in launch.json:
 
 ```json
     {
