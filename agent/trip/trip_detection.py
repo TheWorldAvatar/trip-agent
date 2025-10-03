@@ -1135,7 +1135,7 @@ def make_index(iter, time_series: pd.Series, binary: bool) -> list:
     return index_list
 
 
-def detect_trips(gps_data, pid, columns, params=DEFAULT_PARAMS,
+def detect_trips(gps_data, pid, columns, input_params=None,
                  interpolate_helper_func=interpolate_over_period, code=None):
     """
     Method for detecting trips from GPS data.
@@ -1143,7 +1143,7 @@ def detect_trips(gps_data, pid, columns, params=DEFAULT_PARAMS,
     :param gps_data: data frame containing the GPS data to detect trips on.
     :param pid: a string containing the participant's INTERACT ID (or other unique identifier);
                 Used when generating temporary files.
-    :param params: dictionary containing the parameters for the trip detection, each as described in the documentation.
+    :param input_params: dictionary containing the parameters for the trip detection, each as described in the documentation.
     :param interpolate_helper_func: function to be used to interpolate GPS track. Function signature as follow:
                 interpolate_helper_func(df, columns, frequency, noise). No interpolation if None
     :param columns: a dictionary containing the names of utc_date, lat, lon, utm_n and utm_e columns in the dataframe.
@@ -1156,6 +1156,11 @@ def detect_trips(gps_data, pid, columns, params=DEFAULT_PARAMS,
 
     # Make temporary scratch folder to store intermediate values and prevent thrashing.
     os.makedirs(os.getcwd() + "/temp", exist_ok=True)
+    
+    params = DEFAULT_PARAMS.copy()
+    
+    if input_params:
+        params.update(input_params)
 
     # Load parameters and initialize needed values
     cell_size = params["CELL_SIZE"]  # meters
