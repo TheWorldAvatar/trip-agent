@@ -8,6 +8,7 @@ from agent.trip.trip_detection import detect_trips, CH_TRIP_INDEX
 from py4j.java_gateway import JavaObject
 from agent.trip.kg_client import KgClient
 from agent.utils.baselib_gateway import baselib_view, jpsBaseLibGW
+import json
 
 logger = agentlogging.get_logger('dev')
 
@@ -22,6 +23,21 @@ def api():
     iri = request.args['iri']
     upperbound = request.args.get('upperbound')
     lowerbound = request.args.get('lowerbound')
+    
+    # parameter should be provided as a JSOn string
+    params_json_str = request.args.get('params')
+    params = {}
+    
+    if params_json_str:
+        logger.info(f"Received custom parameters: {params_json_str}")
+        try:
+            # Parse the JSON string from the query parameter into a Python dictionary
+            params = json.loads(params_json_str)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode params: {e}")
+            # Return an HTTP 400 Bad Request error if the JSON is invalid
+            return {"error": f"Invalid JSON in 'params' query parameter: {e}"}, 400
+
 
     time_series_client = TimeSeriesClient(iri)
     kg_client = KgClient()
@@ -62,6 +78,7 @@ def api():
             dataframe,
             iri,
             columns,
+            input_params=params,
             interpolate_helper_func=None,
             code=utm_code
         )
