@@ -1,19 +1,24 @@
-from agent.utils.baselib_gateway import baselib_view
-from agent.utils.stack_configs import BLAZEGRAPH_URL
+from agent.utils.baselib_gateway import baselib_view, jpsBaseLibGW
+from agent.utils.java_time_parser import JavaTimeParser
+from agent.utils.stack_configs import BLAZEGRAPH_URL, STACK_OUTGOING
 import uuid
+import json
+from py4j.java_gateway import JavaObject
+import pandas as pd
+from shapely import wkt
+from agent.trip.utilities import wgs_to_utm_code
 
 PREFIX = 'https://www.theworldavatar.com/kg/ontoexposure/'
 TRIP = PREFIX + 'Trip'
 TIMESERIES_NAMESPACE = 'https://www.theworldavatar.com/kg/ontotimeseries/'
 HAS_TIME_SERIES = TIMESERIES_NAMESPACE + 'hasTimeSeries'
-TIMESERIES_TYPE = TIMESERIES_NAMESPACE + 'TimeSeries'
 HAS_TIME_CLASS = TIMESERIES_NAMESPACE + 'hasTimeClass'
 
 
 class KgClient():
     def __init__(self):
         self.remote_store_client = baselib_view.RemoteStoreClient(
-            BLAZEGRAPH_URL, BLAZEGRAPH_URL)
+            STACK_OUTGOING, BLAZEGRAPH_URL)
 
     def get_trip(self, point_iri: str):
         query = f"""
@@ -59,3 +64,105 @@ class KgClient():
         """
         query_results = self.remote_store_client.executeQuery(query)
         return query_results.getJSONObject(0).getString('time_class')
+
+    def get_trajectory_time_series(self, point_iri: str, lowerbound, upperbound):
+        conditions = []
+
+        if lowerbound is not None:
+            if isinstance(lowerbound, JavaObject):
+                condition = f""" ?timestamp >= "{lowerbound.toString()}"^^xsd:dateTime"""
+            else:
+                condition = f"""?time_number >= {lowerbound}"""
+            conditions.append(condition)
+
+        if upperbound is not None:
+            if isinstance(upperbound, JavaObject):
+                condition = f"""?timestamp <= "{upperbound.toString()}"^^xsd:dateTime"""
+            else:
+                condition = f"""?time_number <= {upperbound}"""
+            conditions.append(condition)
+
+        filter_clause = ''
+        if conditions:
+            filter_clause = f"FILTER ({' && '.join(conditions)})"
+
+        query = f"""
+        PREFIX time: <http://www.w3.org/2006/time#>
+        PREFIX timeseries: <https://www.theworldavatar.com/kg/ontotimeseries/>
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        SELECT ?timestamp ?time_number ?val
+        WHERE {{
+            ?obs timeseries:observationOf <{point_iri}>;
+                time:hasTime/time:inXSDDateTime ?timestamp;
+                time:hasTime/time:inTimePosition/time:numericPosition ?time_number;
+                timeseries:hasResult/timeseries:hasValue ?val.
+            {filter_clause}
+        }}
+        ORDER BY ?timestamp ?time_number
+        """
+
+        query_results = self.remote_store_client.executeQuery(query)
+        query_results_parsed = json.loads(query_results.toString())
+
+        time_list_as_string = []
+        lat = []
+        lon = []
+
+        for row in query_results_parsed:
+            if 'timestamp' in row:
+                time_list_as_string.append(row['timestamp'])
+            else:
+                time_list_as_string.append(row['time_number'])
+
+            point = wkt.loads(row['val'])
+            lon.append(point.x)
+            lat.append(point.y)
+        timestamps = pd.to_datetime(time_list_as_string, format='ISO8601')
+        utm_code = wgs_to_utm_code(lat[0], lon[0])
+
+        time_list_for_java = self.convert_input_time_for_timeseries(
+            time=time_list_as_string, point_iri=point_iri)
+
+        return pd.DataFrame({'utc_date': timestamps, 'lat': lat, 'lon': lon}), utm_code, time_list_for_java
+
+    def convert_input_time_for_timeseries(self, time, point_iri: str):
+        # assumes time is in seconds or milliseconds, if an exception is thrown,
+        # queries the time class from KG (e.g. java.time.Instant) and use the
+        # parse method to parse time into the correct Java object
+        try:
+            # assume epoch seconds
+            if isinstance(time, list):
+                return [int(t) for t in time]
+            else:
+                return int(time)
+        except (ValueError, TypeError):
+            # lots of trial and error done to get Java reflection to work correctly!
+            class_name = self.get_java_time_class(point_iri)
+            time_parser = JavaTimeParser()
+            if isinstance(time, list):
+                time_list = []
+                for t in time:
+                    time_list.append(time_parser.parse_java_time(
+                        class_name=class_name, time_str=t))
+                    # time_list.append(self._parse_java_time(class_name, t))
+                return time_list
+
+            else:
+                return time_parser.parse_java_time(class_name=class_name, time_str=time)
+                # return self._parse_java_time(class_name, time)
+
+    def _parse_java_time(self, class_name: str, time: str):
+        time_clazz = baselib_view.java.lang.Class.forName(class_name)
+
+        char_class = baselib_view.java.lang.Class.forName(
+            "java.lang.CharSequence")
+        param_types = jpsBaseLibGW.gateway.new_array(
+            baselib_view.java.lang.Class, 1)
+        param_types[0] = char_class
+
+        java_string = baselib_view.java.lang.String(time)
+        object_class = baselib_view.java.lang.Object
+        args_array = jpsBaseLibGW.gateway.new_array(object_class, 1)
+        args_array[0] = java_string
+
+        return time_clazz.getMethod("parse", param_types).invoke(None, args_array)

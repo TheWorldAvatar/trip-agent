@@ -28,24 +28,22 @@ def api():
 
     # convert upperbound and lowerbound into the correct types from string
     if upperbound is not None:
-        upperbound = convert_input_time_for_timeseries(
-            upperbound, kg_client, iri)
+        upperbound = kg_client.convert_input_time_for_timeseries(
+            time=upperbound, point_iri=iri)
 
     if lowerbound is not None:
-        lowerbound = convert_input_time_for_timeseries(
-            lowerbound, kg_client, iri)
+        lowerbound = kg_client.convert_input_time_for_timeseries(
+            time=lowerbound, point_iri=iri)
 
     logger.info('Querying time series data')
-    time_series_trajectory = time_series_client.get_time_series(
-        data_iri_list=[iri], lowerbound=lowerbound, upperbound=upperbound)
 
-    if (time_series_trajectory.getTimes().isEmpty()):
+    dataframe, utm_code, time_list_for_java = kg_client.get_trajectory_time_series(
+        point_iri=iri, lowerbound=lowerbound, upperbound=upperbound)
+
+    if len(dataframe) == 0:
         message = 'Time series data is empty'
         logger.error(message)
         return message
-
-    dataframe, utm_code = convert_time_series_to_dataframe(
-        time_series_trajectory, iri)
 
     columns = {
         "utc_date": "utc_date",
@@ -83,8 +81,8 @@ def api():
     trip_list_int = [int(x) for x in detected_gps[CH_TRIP_INDEX]]
 
     # create time series object for upload to time series database
-    time_series_trip_visit = time_series_client.create_time_series(times=time_series_trajectory.getTimes(
-    ), data_iri_list=[trip], values=[trip_list_int])
+    time_series_trip_visit = time_series_client.create_time_series(
+        times=time_list_for_java, data_iri_list=[trip], values=[trip_list_int])
 
     # upload to database
     time_series_client.add_time_series(time_series=time_series_trip_visit)
@@ -97,9 +95,10 @@ def convert_time_series_to_dataframe(time_series, point_iri: str):
 
     # convert timestamps from TWA time series into pandas timestamps
     if isinstance(original_time_list[0], JavaObject):
+        timestamps = []
         # assume something like Instant
-        time_string_list = [time.toString() for time in original_time_list]
-        timestamps = pd.to_datetime(time_string_list)
+        for time in original_time_list:
+            timestamps.append(pd.to_datetime(time.toString()))
     else:
         # probably epoch
         try:
