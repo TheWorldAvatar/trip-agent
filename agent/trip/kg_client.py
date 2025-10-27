@@ -104,24 +104,37 @@ class KgClient():
         query_results = self.remote_store_client.executeQuery(query)
         query_results_parsed = json.loads(query_results.toString())
 
-        time_list_as_string = []
+        timestamp_list_as_string = []
+        timenumber_list_as_string = []
         lat = []
         lon = []
 
         for row in query_results_parsed:
             if 'timestamp' in row:
-                time_list_as_string.append(row['timestamp'])
-            else:
-                time_list_as_string.append(row['time_number'])
+                timestamp_list_as_string.append(row['timestamp'])
+            if 'time_number' in row:
+                timenumber_list_as_string.append(row['time_number'])
 
             point = wkt.loads(row['val'])
             lon.append(point.x)
             lat.append(point.y)
-        timestamps = pd.to_datetime(time_list_as_string, format='ISO8601')
+
+        if timestamp_list_as_string:
+            timestamps = pd.to_datetime(
+                timestamp_list_as_string, format='ISO8601')
+        else:
+            time_number_list = [float(t) for t in timenumber_list_as_string]
+            timestamps = pd.to_datetime(time_number_list, unit='s')
+
         utm_code = wgs_to_utm_code(lat[0], lon[0])
 
-        time_list_for_java = self.convert_input_time_for_timeseries(
-            time=time_list_as_string, point_iri=point_iri)
+        # if it is not a timestamp, save to assume that it is a number
+        if timestamp_list_as_string:
+            time_list_for_java = self.convert_input_time_for_timeseries(
+                time=timestamp_list_as_string, point_iri=point_iri)
+        else:
+            time_list_for_java = self.convert_input_time_for_timeseries(
+                time=timenumber_list_as_string, point_iri=point_iri)
 
         return pd.DataFrame({'utc_date': timestamps, 'lat': lat, 'lon': lon}), utm_code, time_list_for_java
 
@@ -132,9 +145,9 @@ class KgClient():
         try:
             # assume epoch seconds
             if isinstance(time, list):
-                return [int(t) for t in time]
+                return [float(t) for t in time]
             else:
-                return int(time)
+                return float(time)
         except (ValueError, TypeError):
             # lots of trial and error done to get Java reflection to work correctly!
             class_name = self.get_java_time_class(point_iri)
@@ -149,20 +162,3 @@ class KgClient():
 
             else:
                 return time_parser.parse_java_time(class_name=class_name, time_str=time)
-                # return self._parse_java_time(class_name, time)
-
-    def _parse_java_time(self, class_name: str, time: str):
-        time_clazz = baselib_view.java.lang.Class.forName(class_name)
-
-        char_class = baselib_view.java.lang.Class.forName(
-            "java.lang.CharSequence")
-        param_types = jpsBaseLibGW.gateway.new_array(
-            baselib_view.java.lang.Class, 1)
-        param_types[0] = char_class
-
-        java_string = baselib_view.java.lang.String(time)
-        object_class = baselib_view.java.lang.Object
-        args_array = jpsBaseLibGW.gateway.new_array(object_class, 1)
-        args_array[0] = java_string
-
-        return time_clazz.getMethod("parse", param_types).invoke(None, args_array)

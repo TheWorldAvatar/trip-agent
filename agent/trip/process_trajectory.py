@@ -116,29 +116,3 @@ def convert_time_series_to_dataframe(time_series, point_iri: str):
     utm_code = wgs_to_utm_code(lat[0], lon[0])
 
     return pd.DataFrame({'utc_date': timestamps, 'lat': lat, 'lon': lon}), utm_code
-
-
-def convert_input_time_for_timeseries(time, kg_client: KgClient, point_iri: str):
-    # assumes time is in seconds or milliseconds, if an exception is thrown,
-    # queries the time class from KG (e.g. java.time.Instant) and use the
-    # parse method to parse time into the correct Java object
-    try:
-        # assume epoch seconds
-        return int(time)
-    except (ValueError, TypeError):
-        # lots of trial and error done to get Java reflection to work correctly!
-        class_name = kg_client.get_java_time_class(point_iri)
-        time_clazz = baselib_view.java.lang.Class.forName(class_name)
-
-        char_class = baselib_view.java.lang.Class.forName(
-            "java.lang.CharSequence")
-        param_types = jpsBaseLibGW.gateway.new_array(
-            baselib_view.java.lang.Class, 1)
-        param_types[0] = char_class
-
-        java_string = baselib_view.java.lang.String(time)
-        object_class = baselib_view.java.lang.Object
-        args_array = jpsBaseLibGW.gateway.new_array(object_class, 1)
-        args_array[0] = java_string
-
-        return time_clazz.getMethod("parse", param_types).invoke(None, args_array)
