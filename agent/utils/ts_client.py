@@ -1,6 +1,6 @@
 from twa import agentlogging
 from contextlib import contextmanager
-from agent.utils.baselib_gateway import baselib_view
+from agent.utils.stack_gateway import stack_clients_view
 from agent.utils.stack_configs import BLAZEGRAPH_URL, RDB_USER, RDB_URL, RDB_PASSWORD
 
 logger = agentlogging.get_logger('dev')
@@ -14,13 +14,13 @@ class TimeSeriesClient:
 
     def __init__(self, point_iri):
         try:
-            remote_store_client = baselib_view.RemoteStoreClient(
+            remote_store_client = stack_clients_view.RemoteStoreClient(
                 BLAZEGRAPH_URL, BLAZEGRAPH_URL)
 
-            self.tsclient = baselib_view.TimeSeriesClientFactory.getInstance(
+            self.tsclient = stack_clients_view.TimeSeriesClientFactory.getInstance(
                 remote_store_client, [point_iri])
 
-            self.rdb_remote_client = baselib_view.RemoteRDBStoreClient(
+            self.rdb_remote_client = stack_clients_view.RemoteRDBStoreClient(
                 RDB_URL, RDB_USER, RDB_PASSWORD)
         except Exception as ex:
             logger.error("Unable to initialise TimeSeriesClient.")
@@ -52,7 +52,8 @@ class TimeSeriesClient:
             values (list): List of list of values per dataIRI     
         """
         try:
-            timeseries = baselib_view.TimeSeries(times, data_iri_list, values)
+            timeseries = stack_clients_view.TimeSeries(
+                times, data_iri_list, values)
         except Exception as ex:
             logger.error("Unable to create TimeSeries object.")
             raise TimeSeriesException("Unable to create timeseries.") from ex

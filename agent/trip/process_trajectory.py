@@ -7,7 +7,7 @@ from agent.trip.utilities import wgs_to_utm_code
 from agent.trip.trip_detection import detect_trips, CH_TRIP_INDEX
 from py4j.java_gateway import JavaObject
 from agent.trip.kg_client import KgClient
-from agent.utils.baselib_gateway import baselib_view, jpsBaseLibGW
+from agent.utils.stack_gateway import stack_clients_view, stackClientsGw
 
 logger = agentlogging.get_logger('dev')
 
@@ -75,7 +75,7 @@ def api():
         trip = kg_client.instantiate_trip()
         time_series_iri = kg_client.get_time_series_iri(iri)
         time_series_client.add_columns(time_series_iri=time_series_iri, data_iri=[
-            trip], class_list=[baselib_view.java.lang.Integer.TYPE])
+            trip], class_list=[stack_clients_view.java.lang.Integer.TYPE])
 
     # py4j requires python native int, pandas array won't work
     trip_list_int = [int(x) for x in detected_gps[CH_TRIP_INDEX]]

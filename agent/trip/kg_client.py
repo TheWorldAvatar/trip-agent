@@ -1,5 +1,4 @@
-from agent.utils.baselib_gateway import baselib_view, jpsBaseLibGW
-from agent.utils.java_time_parser import JavaTimeParser
+from agent.utils.stack_gateway import stack_clients_view
 from agent.utils.stack_configs import BLAZEGRAPH_URL, STACK_OUTGOING
 import uuid
 import json
@@ -17,7 +16,7 @@ HAS_TIME_CLASS = TIMESERIES_NAMESPACE + 'hasTimeClass'
 
 class KgClient():
     def __init__(self):
-        self.remote_store_client = baselib_view.RemoteStoreClient(
+        self.remote_store_client = stack_clients_view.RemoteStoreClient(
             STACK_OUTGOING, BLAZEGRAPH_URL)
 
     def get_trip(self, point_iri: str):
@@ -93,9 +92,9 @@ class KgClient():
         SELECT ?timestamp ?time_number ?val
         WHERE {{
             ?obs timeseries:observationOf <{point_iri}>;
-                time:hasTime/time:inXSDDateTime ?timestamp;
-                time:hasTime/time:inTimePosition/time:numericPosition ?time_number;
                 timeseries:hasResult/timeseries:hasValue ?val.
+            OPTIONAL {{?obs time:hasTime/time:inXSDDateTime ?timestamp.}}
+            OPTIONAL {{?obs time:hasTime/time:inTimePosition/time:numericPosition ?time_number.}}
             {filter_clause}
         }}
         ORDER BY ?timestamp ?time_number
@@ -126,6 +125,9 @@ class KgClient():
             time_number_list = [float(t) for t in timenumber_list_as_string]
             timestamps = pd.to_datetime(time_number_list, unit='s')
 
+        if len(query_results_parsed) == 0:
+            return pd.DataFrame()
+
         utm_code = wgs_to_utm_code(lat[0], lon[0])
 
         # if it is not a timestamp, save to assume that it is a number
@@ -149,16 +151,5 @@ class KgClient():
             else:
                 return float(time)
         except (ValueError, TypeError):
-            # lots of trial and error done to get Java reflection to work correctly!
             class_name = self.get_java_time_class(point_iri)
-            time_parser = JavaTimeParser()
-            if isinstance(time, list):
-                time_list = []
-                for t in time:
-                    time_list.append(time_parser.parse_java_time(
-                        class_name=class_name, time_str=t))
-                    # time_list.append(self._parse_java_time(class_name, t))
-                return time_list
-
-            else:
-                return time_parser.parse_java_time(class_name=class_name, time_str=time)
+            return stack_clients_view.TimeSeriesClientFactory.timestampFactory(class_name, time)

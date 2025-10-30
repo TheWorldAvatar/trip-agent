@@ -11,10 +11,6 @@ class StackException(Exception):
 
 
 def retrieve_stack_settings():
-    """
-    Note: do not obtain an object from stack_clients_view and pass it to the baselib_view
-    e.g. getting a RemoteStoreClient via BlazegraphClient and pass it to TimeSeriesClient
-    """
     # Define global scope for global variables
     global BLAZEGRAPH_URL, ONTOP_URL, RDB_URL, RDB_USER, RDB_PASSWORD, STACK_OUTGOING
     try:
