@@ -12,11 +12,9 @@ class StackException(Exception):
 
 def retrieve_stack_settings():
     # Define global scope for global variables
-    global BLAZEGRAPH_URL, ONTOP_URL, RDB_URL, RDB_USER, RDB_PASSWORD, STACK_OUTGOING
+    global BLAZEGRAPH_URL, RDB_URL, RDB_USER, RDB_PASSWORD, STACK_OUTGOING
     try:
         # Retrieve endpoint configurations from Stack clients
-        ONTOP_URL = stack_clients_view.OntopClient.getInstance(
-            "ontop").readEndpointConfig().getUrl()
         RDB_URL = stack_clients_view.PostGISClient.getInstance(
         ).readEndpointConfig().getJdbcURL(DATABASE)
         RDB_USER = stack_clients_view.PostGISClient.getInstance(
