@@ -6,6 +6,9 @@ from py4j.java_gateway import JavaObject
 import pandas as pd
 from shapely import wkt
 from agent.trip.utilities import wgs_to_utm_code
+import requests
+from urllib.parse import urlsplit
+from agent.utils.env_configs import NAMESPACE
 
 PREFIX = 'https://www.theworldavatar.com/kg/ontoexposure/'
 TRIP = PREFIX + 'Trip'
@@ -18,6 +21,28 @@ class KgClient():
     def __init__(self):
         self.remote_store_client = stack_clients_view.RemoteStoreClient(
             STACK_OUTGOING, BLAZEGRAPH_URL)
+
+        # check if namespace exists, if not initialise
+        r = requests.head(BLAZEGRAPH_URL)
+
+        if r.status_code != 200:
+            # get the front part of the url
+            parsed_url = urlsplit(BLAZEGRAPH_URL)
+            url = f"{parsed_url.scheme}://{parsed_url.netloc}" + \
+                '/blazegraph/namespace'
+
+            props = (
+                f"com.bigdata.rdf.sail.namespace={NAMESPACE}\n"
+                f"com.bigdata.rdf.store.AbstractTripleStore.quads=false\n"
+                f"com.bigdata.rdf.store.AbstractTripleStore.axiomsClass=com.bigdata.rdf.axioms.NoAxioms\n"
+            )
+
+            r = requests.post(url, data=props, headers={
+                              "Content-Type": "text/plain"})
+
+            if r.status_code not in (200, 201):
+                raise RuntimeError(
+                    f"Failed to create namespace '{NAMESPACE}': {r.status_code} {r.text}")
 
     def get_trip(self, point_iri: str):
         query = f"""
