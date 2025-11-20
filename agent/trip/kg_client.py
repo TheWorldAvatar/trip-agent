@@ -94,14 +94,14 @@ class KgClient():
 
         if lowerbound is not None:
             if isinstance(lowerbound, JavaObject):
-                condition = f""" ?timestamp >= "{lowerbound.toString()}"^^xsd:dateTime"""
+                condition = f""" ?timestamp >= "{lowerbound[0].toString()}"^^xsd:dateTime"""
             else:
                 condition = f"""?time_number >= {lowerbound}"""
             conditions.append(condition)
 
         if upperbound is not None:
             if isinstance(upperbound, JavaObject):
-                condition = f"""?timestamp <= "{upperbound.toString()}"^^xsd:dateTime"""
+                condition = f"""?timestamp <= "{upperbound[0].toString()}"^^xsd:dateTime"""
             else:
                 condition = f"""?time_number <= {upperbound}"""
             conditions.append(condition)
