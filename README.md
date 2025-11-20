@@ -27,6 +27,10 @@ API route:
 
     Format for upperbound and lowerbound depends on the instantiated time series table, tested with epoch seconds/milliseconds and java.time.Instant. In principle, it should work for any Java time classes with the "parse" method, e.g. ZonedDateTime.
 
+## Prerequisite
+
+This agent makes use of the outgoing stack endpoint <https://github.com/TheWorldAvatar/stack/tree/main/stack-manager#outgoing-stack-endpoint> for querying. Therefore please make sure that time series data is retrievable at this endpoint.
+
 ## Instantiation of trips
 
 Trip detection code is adapted from <https://github.com/TeamINTERACT/trip_detection/tree/master>.
