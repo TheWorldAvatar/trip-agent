@@ -1,8 +1,20 @@
 # Trip agent
 
+## Prerequisite
+
+This agent makes use of the outgoing stack endpoint <https://github.com/TheWorldAvatar/stack/tree/main/stack-manager#outgoing-stack-endpoint> for querying. Therefore please make sure that time series data is retrievable at this endpoint.
+
+It is assumed that time series data is instantiated using <https://github.com/TheWorldAvatar/stack/blob/main/stack-clients/src/main/java/com/cmclinnovations/stack/clients/timeseries/TimeSeriesRDBClient.java>.
+
+## Environment variables
+
+- NAMESPACE (optional, defaults to kb)
+  - This namespace will be used to instantiate the new trip instance, e.g. `<http://trip> a <https://www.theworldavatar.com/kg/ontoexposure/Trip>`. Time series related triples will be instantiated in the original update endpoint used for the point time series.
+- DATABASE (optional, defaults to postgres)
+
 This agent processes time series of points to produce trips and visits. It is designed to be deployed on <https://github.com/TheWorldAvatar/hd4-stack>.
 
-API route:
+## API routes
 
 1) process_trajectory (POST)
    - Assuming this is spun up as a container within a stack using the given config, the agent accepts requests in the following form
@@ -26,12 +38,6 @@ API route:
        - Time filter used to query time series, minimum time in the time series will be used if not provided
 
     Format for upperbound and lowerbound depends on the instantiated time series table, tested with epoch seconds/milliseconds and java.time.Instant. In principle, it should work for any Java time classes with the "parse" method, e.g. ZonedDateTime.
-
-## Prerequisite
-
-This agent makes use of the outgoing stack endpoint <https://github.com/TheWorldAvatar/stack/tree/main/stack-manager#outgoing-stack-endpoint> for querying. Therefore please make sure that time series data is retrievable at this endpoint.
-
-It is assumed that time series data is instantiated using <https://github.com/TheWorldAvatar/stack/blob/main/stack-clients/src/main/java/com/cmclinnovations/stack/clients/timeseries/TimeSeriesRDBClient.java>.
 
 ## Instantiation of trips
 
