@@ -31,6 +31,8 @@ API route:
 
 This agent makes use of the outgoing stack endpoint <https://github.com/TheWorldAvatar/stack/tree/main/stack-manager#outgoing-stack-endpoint> for querying. Therefore please make sure that time series data is retrievable at this endpoint.
 
+It is assumed that time series data is instantiated using <https://github.com/TheWorldAvatar/stack/blob/main/stack-clients/src/main/java/com/cmclinnovations/stack/clients/timeseries/TimeSeriesRDBClient.java>.
+
 ## Instantiation of trips
 
 Trip detection code is adapted from <https://github.com/TeamINTERACT/trip_detection/tree/master>.
