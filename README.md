@@ -14,16 +14,17 @@ It is assumed that time series data is instantiated using <https://github.com/Th
 
 This agent processes time series of points to produce trips and visits. It is designed to be deployed on <https://github.com/TheWorldAvatar/hd4-stack>.
 
-## API routes
+## API route
 
-1) process_trajectory (POST)
-   - Assuming this is spun up as a container within a stack using the given config, the agent accepts requests in the following form
+process_trajectory (POST)
+
+- Assuming this is spun up as a container within a stack using the this config <https://github.com/TheWorldAvatar/hd4-stack/blob/main/stack-manager/inputs/config/services/trip-agent.json>, the agent accepts requests in the following form
 
     ```bash
     curl -X POST http://localhost:3838/trip-agent/process_trajectory?iri=http://abc&lowerbound=123&upperbound=123
     ```
 
-    Inputs:
+- Inputs:
     1) iri
        - This IRI should contain a time series of PostGIS points and should contain the following triple
 
