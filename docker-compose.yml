@@ -1,6 +1,6 @@
 services:
   trip-agent:
-    image: ghcr.io/theworldavatar/trip-agent:2.0.0
+    image: ghcr.io/theworldavatar/trip-agent:2.0.1a
     build:
       context: .
       target: production
