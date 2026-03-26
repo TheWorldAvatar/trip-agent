@@ -1,3 +1,4 @@
+Setuptools<81
 flask
 pandas
 numpy
