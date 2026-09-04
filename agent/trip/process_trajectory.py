@@ -7,7 +7,8 @@ from agent.trip.utilities import wgs_to_utm_code
 from agent.trip.trip_detection import detect_trips, CH_TRIP_INDEX
 from py4j.java_gateway import JavaObject
 from agent.trip.kg_client import KgClient
-from agent.utils.stack_gateway import stack_clients_view, stackClientsGw
+from agent.utils.stack_gateway import stack_clients_view
+from agent.utils.postgis_client import postgis_client
 
 logger = agentlogging.get_logger('dev')
 
@@ -73,6 +74,7 @@ def api():
     if trip is None:
         logger.info('Trip does not exist, instantiating')
         trip = kg_client.instantiate_trip()
+        postgis_client.add_point_to_trip(point_iri=iri, trip_iri=trip)
         time_series_iri = kg_client.get_time_series_iri(iri)
         time_series_client.add_columns(time_series_iri=time_series_iri, data_iri=[
             trip], class_list=[stack_clients_view.java.lang.Integer.TYPE])

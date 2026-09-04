@@ -1,6 +1,6 @@
 services:
   trip-agent:
-    image: ghcr.io/theworldavatar/trip-agent:2.0.0
+    image: ghcr.io/theworldavatar/trip-agent:2.1.0-11-add-trip-to-timeline-layers-SNAPSHOT
     build:
       context: .
       target: production
