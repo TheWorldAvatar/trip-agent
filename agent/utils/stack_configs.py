@@ -11,16 +11,10 @@ class StackException(Exception):
 
 
 def retrieve_stack_settings():
-    """
-    Note: do not obtain an object from stack_clients_view and pass it to the baselib_view
-    e.g. getting a RemoteStoreClient via BlazegraphClient and pass it to TimeSeriesClient
-    """
     # Define global scope for global variables
-    global BLAZEGRAPH_URL, ONTOP_URL, RDB_URL, RDB_USER, RDB_PASSWORD
+    global BLAZEGRAPH_URL, RDB_URL, RDB_USER, RDB_PASSWORD, STACK_OUTGOING
     try:
         # Retrieve endpoint configurations from Stack clients
-        ONTOP_URL = stack_clients_view.OntopClient.getInstance(
-            "ontop").readEndpointConfig().getUrl()
         RDB_URL = stack_clients_view.PostGISClient.getInstance(
         ).readEndpointConfig().getJdbcURL(DATABASE)
         RDB_USER = stack_clients_view.PostGISClient.getInstance(
@@ -30,6 +24,9 @@ def retrieve_stack_settings():
 
         BLAZEGRAPH_URL = stack_clients_view.BlazegraphClient.getInstance(
         ).readEndpointConfig().getUrl(NAMESPACE)
+
+        STACK_OUTGOING = stack_clients_view.Rdf4jClient.getInstance(
+        ).readEndpointConfig().getOutgoingRepositoryUrl()
 
     except Exception as e:
         err_msg = "General Stack client parameter extraction error: {}".format(

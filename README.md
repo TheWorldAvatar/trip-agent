@@ -1,17 +1,30 @@
 # Trip agent
 
+## Prerequisite
+
+This agent makes use of the outgoing stack endpoint <https://github.com/TheWorldAvatar/stack/tree/main/stack-manager#outgoing-stack-endpoint> for querying. Therefore please make sure that time series data is retrievable at this endpoint.
+
+It is assumed that time series data is instantiated using <https://github.com/TheWorldAvatar/stack/blob/main/stack-clients/src/main/java/com/cmclinnovations/stack/clients/timeseries/TimeSeriesRDBClient.java>.
+
+## Environment variables
+
+- NAMESPACE (optional, defaults to kb)
+  - This namespace will be used to instantiate the new trip instance, e.g. `<http://trip> a <https://www.theworldavatar.com/kg/ontoexposure/Trip>`. Time series related triples will be instantiated in the original update endpoint used for the point time series.
+- DATABASE (optional, defaults to postgres)
+
 This agent processes time series of points to produce trips and visits. It is designed to be deployed on <https://github.com/TheWorldAvatar/hd4-stack>.
 
-API route:
+## API route
 
-1) process_trajectory (POST)
-   - Assuming this is spun up as a container within a stack using the given config, the agent accepts requests in the following form
+process_trajectory (POST)
+
+- Assuming this is spun up as a container within a stack using the this config <https://github.com/TheWorldAvatar/hd4-stack/blob/main/stack-manager/inputs/config/services/trip-agent.json>, the agent accepts requests in the following form
 
     ```bash
     curl -X POST http://localhost:3838/trip-agent/process_trajectory?iri=http://abc&lowerbound=123&upperbound=123
     ```
 
-    Inputs:
+- Inputs:
     1) iri
        - This IRI should contain a time series of PostGIS points and should contain the following triple
 

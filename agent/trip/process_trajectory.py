@@ -7,7 +7,7 @@ from agent.trip.utilities import wgs_to_utm_code
 from agent.trip.trip_detection import detect_trips, CH_TRIP_INDEX
 from py4j.java_gateway import JavaObject
 from agent.trip.kg_client import KgClient
-from agent.utils.baselib_gateway import baselib_view, jpsBaseLibGW
+from agent.utils.stack_gateway import stack_clients_view, stackClientsGw
 
 logger = agentlogging.get_logger('dev')
 
@@ -28,24 +28,22 @@ def api():
 
     # convert upperbound and lowerbound into the correct types from string
     if upperbound is not None:
-        upperbound = convert_input_time_for_timeseries(
-            upperbound, kg_client, iri)
+        upperbound = kg_client.convert_input_time_for_timeseries(
+            time=upperbound, point_iri=iri)
 
     if lowerbound is not None:
-        lowerbound = convert_input_time_for_timeseries(
-            lowerbound, kg_client, iri)
+        lowerbound = kg_client.convert_input_time_for_timeseries(
+            time=lowerbound, point_iri=iri)
 
     logger.info('Querying time series data')
-    time_series_trajectory = time_series_client.get_time_series(
-        data_iri_list=[iri], lowerbound=lowerbound, upperbound=upperbound)
 
-    if (time_series_trajectory.getTimes().isEmpty()):
+    dataframe, utm_code, time_list_for_java = kg_client.get_trajectory_time_series(
+        point_iri=iri, lowerbound=lowerbound, upperbound=upperbound)
+
+    if len(dataframe) == 0:
         message = 'Time series data is empty'
         logger.error(message)
         return message
-
-    dataframe, utm_code = convert_time_series_to_dataframe(
-        time_series_trajectory, iri)
 
     columns = {
         "utc_date": "utc_date",
@@ -77,14 +75,14 @@ def api():
         trip = kg_client.instantiate_trip()
         time_series_iri = kg_client.get_time_series_iri(iri)
         time_series_client.add_columns(time_series_iri=time_series_iri, data_iri=[
-            trip], class_list=[baselib_view.java.lang.Integer.TYPE])
+            trip], class_list=[stack_clients_view.java.lang.Integer.TYPE])
 
     # py4j requires python native int, pandas array won't work
     trip_list_int = [int(x) for x in detected_gps[CH_TRIP_INDEX]]
 
     # create time series object for upload to time series database
-    time_series_trip_visit = time_series_client.create_time_series(times=time_series_trajectory.getTimes(
-    ), data_iri_list=[trip], values=[trip_list_int])
+    time_series_trip_visit = time_series_client.create_time_series(
+        times=time_list_for_java, data_iri_list=[trip], values=[trip_list_int])
 
     # upload to database
     time_series_client.add_time_series(time_series=time_series_trip_visit)
@@ -97,9 +95,10 @@ def convert_time_series_to_dataframe(time_series, point_iri: str):
 
     # convert timestamps from TWA time series into pandas timestamps
     if isinstance(original_time_list[0], JavaObject):
+        timestamps = []
         # assume something like Instant
-        time_string_list = [time.toString() for time in original_time_list]
-        timestamps = pd.to_datetime(time_string_list)
+        for time in original_time_list:
+            timestamps.append(pd.to_datetime(time.toString()))
     else:
         # probably epoch
         try:
@@ -117,29 +116,3 @@ def convert_time_series_to_dataframe(time_series, point_iri: str):
     utm_code = wgs_to_utm_code(lat[0], lon[0])
 
     return pd.DataFrame({'utc_date': timestamps, 'lat': lat, 'lon': lon}), utm_code
-
-
-def convert_input_time_for_timeseries(time, kg_client: KgClient, point_iri: str):
-    # assumes time is in seconds or milliseconds, if an exception is thrown,
-    # queries the time class from KG (e.g. java.time.Instant) and use the
-    # parse method to parse time into the correct Java object
-    try:
-        # assume epoch seconds
-        return int(time)
-    except (ValueError, TypeError):
-        # lots of trial and error done to get Java reflection to work correctly!
-        class_name = kg_client.get_java_time_class(point_iri)
-        time_clazz = baselib_view.java.lang.Class.forName(class_name)
-
-        char_class = baselib_view.java.lang.Class.forName(
-            "java.lang.CharSequence")
-        param_types = jpsBaseLibGW.gateway.new_array(
-            baselib_view.java.lang.Class, 1)
-        param_types[0] = char_class
-
-        java_string = baselib_view.java.lang.String(time)
-        object_class = baselib_view.java.lang.Object
-        args_array = jpsBaseLibGW.gateway.new_array(object_class, 1)
-        args_array[0] = java_string
-
-        return time_clazz.getMethod("parse", param_types).invoke(None, args_array)
