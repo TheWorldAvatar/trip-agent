@@ -3,6 +3,7 @@ pandas
 numpy
 scipy
 requests
+PyJWT[crypto]
 psycopg2-binary
 twa==0.0.10
 matplotlib
