@@ -11,12 +11,20 @@ It is assumed that time series data is instantiated using <https://github.com/Th
 - NAMESPACE (optional, defaults to kb)
   - This namespace will be used to instantiate the new trip instance, e.g. `<http://trip> a <https://www.theworldavatar.com/kg/ontoexposure/Trip>`. Time series related triples will be instantiated in the original update endpoint used for the point time series.
 - DATABASE (optional, defaults to postgres)
+- KEYCLOAK_SERVER
+  - Base URL of the Keycloak server, including any context path, for example `http://localhost:8080/keycloak`.
+  - Required by the authenticated `process_trajectory_for_timeline` route.
+- KEYCLOAK_REALM
+  - Name of the Keycloak realm that issues access tokens to timeline users.
+  - Required by the authenticated `process_trajectory_for_timeline` route.
 
 This agent processes time series of points to produce trips and visits. It is designed to be deployed on <https://github.com/TheWorldAvatar/hd4-stack>.
 
-## API route
+## API routes
 
-process_trajectory (POST)
+### `process_trajectory` (POST)
+
+This route remains unauthenticated and processes one point IRI supplied by the caller.
 
 - Assuming this is spun up as a container within a stack using the this config <https://github.com/TheWorldAvatar/hd4-stack/blob/main/stack-manager/inputs/config/services/trip-agent.json>, the agent accepts requests in the following form
 
@@ -39,6 +47,33 @@ process_trajectory (POST)
        - Time filter used to query time series, minimum time in the time series will be used if not provided
 
     Format for upperbound and lowerbound depends on the instantiated time series table, tested with epoch seconds/milliseconds and java.time.Instant. In principle, it should work for any Java time classes with the "parse" method, e.g. ZonedDateTime.
+
+### `process_trajectory_for_timeline` (POST)
+
+This route processes all point trajectories belonging to the authenticated timeline user. The point IRIs are resolved from the `sub` claim of a Keycloak access token, so callers do not supply an `iri` parameter.
+
+The request must include the access token as a bearer credential:
+
+```http
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+Example request:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  "http://localhost:3838/trip-agent/process_trajectory_for_timeline?lowerbound=123&upperbound=456"
+```
+
+Inputs:
+
+1. `upperbound` (optional)
+   - Time filter used to query every point time series associated with the user.
+2. `lowerbound` (optional)
+   - Time filter used to query every point time series associated with the user.
+
+If the user has several point IRIs, their observations are combined chronologically for trip detection. The resulting trip indices are then written back to each corresponding point time series.
 
 ## Instantiation of trips
 
