@@ -15,6 +15,8 @@ TRIP = PREFIX + 'Trip'
 TIMESERIES_NAMESPACE = 'https://www.theworldavatar.com/kg/ontotimeseries/'
 HAS_TIME_SERIES = TIMESERIES_NAMESPACE + 'hasTimeSeries'
 HAS_TIME_CLASS = TIMESERIES_NAMESPACE + 'hasTimeClass'
+SENSOR_LOGGER_APP_NAMESPACE = 'https://www.theworldavatar.com/kg/sensorloggerapp/'
+ONTODEVICE_NAMESPACE = 'https://www.theworldavatar.com/kg/ontodevice/'
 
 
 class KgClient():
@@ -60,6 +62,28 @@ class KgClient():
             trip = query_results.getJSONObject(0).getString('trip')
 
         return trip
+
+    def get_point_iris(self, user_id: str):
+        """Return the distinct geolocation point IRIs belonging to a user."""
+        if not user_id or any(char in user_id for char in '<>"{}|\\^`'):
+            raise ValueError(
+                'user_id contains characters that are not valid in an IRI')
+
+        person_iri = 'https://w3id.org/MON/person.owl#person_' + user_id
+        query = f"""
+        PREFIX sensorloggerapp: <{SENSOR_LOGGER_APP_NAMESPACE}>
+        PREFIX ontodevice: <{ONTODEVICE_NAMESPACE}>
+
+        SELECT DISTINCT ?point
+        WHERE {{
+            <{person_iri}> sensorloggerapp:hasA/
+                <https://saref.etsi.org/core/consistsOf>/
+                ontodevice:hasGeoLocation ?point.
+        }}
+        """
+        query_results = self.remote_store_client.executeQuery(query)
+        parsed_results = json.loads(query_results.toString())
+        return [result['point'] for result in parsed_results]
 
     def get_time_series_iri(self, point_iri: str):
         query = f"""
@@ -128,6 +152,9 @@ class KgClient():
         query_results = self.remote_store_client.executeQuery(query)
         query_results_parsed = json.loads(query_results.toString())
 
+        if len(query_results_parsed) == 0:
+            return pd.DataFrame(), None, []
+
         timestamp_list_as_string = []
         timenumber_list_as_string = []
         lat = []
@@ -149,9 +176,6 @@ class KgClient():
         else:
             time_number_list = [float(t) for t in timenumber_list_as_string]
             timestamps = pd.to_datetime(time_number_list, unit='s')
-
-        if len(query_results_parsed) == 0:
-            return pd.DataFrame()
 
         utm_code = wgs_to_utm_code(lat[0], lon[0])
 

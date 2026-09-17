@@ -3,7 +3,9 @@ pandas
 numpy
 scipy
 requests
-twa==0.0.8
+PyJWT[crypto]
+psycopg2-binary
+twa==0.0.10
 matplotlib
 pyproj
 scikit-image
