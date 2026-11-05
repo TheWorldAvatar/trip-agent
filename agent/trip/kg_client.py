@@ -9,6 +9,7 @@ from agent.trip.utilities import wgs_to_utm_code
 import requests
 from urllib.parse import urlsplit
 from agent.utils.env_configs import NAMESPACE
+from agent.utils.query_ranges import fetch_time_series_rows
 
 PREFIX = 'https://www.theworldavatar.com/kg/ontoexposure/'
 TRIP = PREFIX + 'Trip'
@@ -130,27 +131,24 @@ class KgClient():
                 condition = f"""?time_number <= {upperbound}"""
             conditions.append(condition)
 
-        filter_clause = ''
-        if conditions:
-            filter_clause = f"FILTER ({' && '.join(conditions)})"
-
-        query = f"""
+        prefix = """
         PREFIX time: <http://www.w3.org/2006/time#>
         PREFIX timeseries: <https://www.theworldavatar.com/kg/ontotimeseries/>
         PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-        SELECT ?timestamp ?time_number ?val
-        WHERE {{
+        """
+        pattern = f"""
             ?obs timeseries:observationOf <{point_iri}>;
                 timeseries:hasResult/timeseries:hasValue ?val.
             OPTIONAL {{?obs time:hasTime/time:inXSDDateTime ?timestamp.}}
             OPTIONAL {{?obs time:hasTime/time:inTimePosition/time:numericPosition ?time_number.}}
-            {filter_clause}
-        }}
-        ORDER BY ?timestamp ?time_number
         """
 
-        query_results = self.remote_store_client.executeQuery(query)
-        query_results_parsed = json.loads(query_results.toString())
+        def execute(query):
+            result = self.remote_store_client.executeQuery(query)
+            return json.loads(result.toString())
+
+        query_results_parsed = fetch_time_series_rows(
+            execute, prefix, pattern, conditions)
 
         if len(query_results_parsed) == 0:
             return pd.DataFrame(), None, []

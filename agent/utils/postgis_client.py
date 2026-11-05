@@ -1,3 +1,4 @@
+from contextlib import closing
 from urllib.parse import urlparse
 
 import psycopg2
@@ -24,7 +25,7 @@ class PostGISClient:
 
     def add_point_to_trip(self, point_iri: str, trip_iri: str):
         """Create the supporting database objects and store a point-trip mapping."""
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
