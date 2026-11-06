@@ -52,6 +52,7 @@ def process_trajectory_for_timeline():
         request.args.get('upperbound'),
         user_id,
         kg_client=kg_client,
+        update_timeline_table=True,
     )
 
 
@@ -95,7 +96,7 @@ def get_authenticated_user_id(authorization_header):
 
 
 def process_trajectories(point_iris, lowerbound, upperbound, participant_id,
-                         kg_client=None):
+                         kg_client=None, update_timeline_table=False):
     """Detect one trajectory across several point time series and persist per point."""
     kg_client = kg_client or KgClient()
     trajectory_frames = []
@@ -179,6 +180,20 @@ def process_trajectories(point_iris, lowerbound, upperbound, participant_id,
             values=[trip_list_int],
         )
         time_series_client.add_time_series(time_series=time_series_trip_visit)
+
+    if update_timeline_table:
+        # One transaction publishes the completed result across all trajectories.
+        assignments = []
+        for point_iri, point_data in detected_gps.groupby('_point_iri', sort=False):
+            for original_time, trip_index in zip(
+                    point_data['_time_for_java'], point_data[CH_TRIP_INDEX]):
+                if isinstance(original_time, JavaObject):
+                    # Match the uploader's time_as_number representation.
+                    source_time = int(original_time.toEpochMilli()) / 1000.0
+                else:
+                    source_time = float(original_time)
+                assignments.append((point_iri, source_time, int(trip_index)))
+        postgis_client.update_timeline_trips(assignments)
 
     return 'Added trip data'
 
