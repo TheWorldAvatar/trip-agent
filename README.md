@@ -17,6 +17,8 @@ It is assumed that time series data is instantiated using <https://github.com/Th
 - KEYCLOAK_REALM
   - Name of the Keycloak realm that issues access tokens to timeline users.
   - Required by the authenticated `process_trajectory_for_timeline` route.
+- TRIP_WORKER_CONCURRENCY
+  - Sets the number of parallel calculations allowed
 
 This agent processes time series of points to produce trips and visits. It is designed to be deployed on <https://github.com/TheWorldAvatar/hd4-stack>.
 
