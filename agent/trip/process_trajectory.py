@@ -51,27 +51,26 @@ def process_trajectory_for_timeline():
 def queue_job(payload, owner_id=None):
     job_id = jobs.enqueue(payload, owner_id=owner_id)
     logger.info('Queued trip job %s', job_id)
-    status_url = 'jobs/' + job_id
-    return {'job_id': job_id, 'status': 'queued', 'status_url': status_url}, 202, {'Location': status_url}
+    response = {'job_id': job_id, 'status': 'queued'}
+    if owner_id is not None:
+        response['status_url'] = 'jobs/active'
+    return response, 202
 
 
-@process_trajectory_bp.route('/jobs/<uuid:job_id>', methods=['GET'])
-def job_status(job_id):
-    job = jobs.get(job_id)
-    if job is None:
-        return {'error': 'Job not found'}, 404
-    if job['owner_id'] is not None:
-        try:
-            user_id = get_authenticated_user_id(request.headers.get('Authorization'))
-        except AuthenticationError as ex:
-            return {'error': str(ex)}, 401, {'WWW-Authenticate': 'Bearer'}
-        if user_id != job['owner_id']:
-            return {'error': 'Job not found'}, 404
-    public = {key: value for key, value in job.items() if key != 'owner_id'}
-    for key in ('created_at', 'started_at', 'finished_at', 'heartbeat_at'):
-        if public.get(key) is not None:
-            public[key] = public[key].isoformat()
-    return public
+@process_trajectory_bp.route('/jobs/active', methods=['GET'])
+def active_jobs():
+    try:
+        user_id = get_authenticated_user_id(request.headers.get('Authorization'))
+    except AuthenticationError as ex:
+        return {'error': str(ex)}, 401, {'WWW-Authenticate': 'Bearer'}
+    public_jobs = []
+    for job in jobs.active_for_owner(user_id):
+        public = {key: value for key, value in job.items() if key != 'owner_id'}
+        for key in ('created_at', 'started_at', 'finished_at', 'heartbeat_at'):
+            if public.get(key) is not None:
+                public[key] = public[key].isoformat()
+        public_jobs.append(public)
+    return public_jobs
 
 
 class AuthenticationError(Exception):
