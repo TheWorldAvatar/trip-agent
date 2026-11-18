@@ -210,14 +210,15 @@ def process_trajectories(point_iris, lowerbound, upperbound, participant_id,
         # One transaction publishes the completed result across all trajectories.
         assignments = []
         for point_iri, point_data in detected_gps.groupby('_point_iri', sort=False):
-            for original_time, trip_index in zip(
-                    point_data['_time_for_java'], point_data[CH_TRIP_INDEX]):
-                if isinstance(original_time, JavaObject):
-                    # Match the uploader's time_as_number representation.
-                    source_time = int(original_time.toEpochMilli()) / 1000.0
-                else:
-                    source_time = float(original_time)
-                assignments.append((point_iri, source_time, int(trip_index)))
+            for source_time, original_time, trip_index in zip(
+                    point_data['_source_time'], point_data['_time_for_java'],
+                    point_data[CH_TRIP_INDEX]):
+                if pd.isna(source_time):
+                    if isinstance(original_time, JavaObject):
+                        source_time = int(original_time.toEpochMilli()) / 1000.0
+                    else:
+                        source_time = original_time
+                assignments.append((point_iri, float(source_time), int(trip_index)))
         logger.info('Prepared %d trip assignments; publishing to trajectory_points', len(assignments))
         postgis_client.update_timeline_trips(assignments)
         logger.info('Shared-table trip publication completed: %d points', len(assignments))

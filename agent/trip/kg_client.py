@@ -161,8 +161,7 @@ class KgClient():
         for row in query_results_parsed:
             if 'timestamp' in row:
                 timestamp_list_as_string.append(row['timestamp'])
-            if 'time_number' in row:
-                timenumber_list_as_string.append(row['time_number'])
+            timenumber_list_as_string.append(row.get('time_number'))
 
             point = wkt.loads(row['val'])
             lon.append(point.x)
@@ -185,7 +184,14 @@ class KgClient():
             time_list_for_java = self.convert_input_time_for_timeseries(
                 time=timenumber_list_as_string, point_iri=point_iri)
 
-        return pd.DataFrame({'utc_date': timestamps, 'lat': lat, 'lon': lon}), utm_code, time_list_for_java
+        dataframe = pd.DataFrame({
+            'utc_date': timestamps,
+            'lat': lat,
+            'lon': lon,
+            '_source_time': [float(value) if value is not None else None
+                             for value in timenumber_list_as_string],
+        })
+        return dataframe, utm_code, time_list_for_java
 
     def convert_input_time_for_timeseries(self, time, point_iri: str):
         # assumes time is in seconds or milliseconds, if an exception is thrown,
