@@ -1,4 +1,4 @@
-FROM ghcr.io/theworldavatar/stack-client:1.55.0 AS stackclients
+FROM ghcr.io/theworldavatar/stack-client:1.60.3 AS stackclients
 #==================================================================================================
 FROM python:3.13-slim AS base
 # Keeps Python from generating .pyc files in the container
@@ -52,5 +52,5 @@ RUN python -m pip install --upgrade pip setuptools wheel \
 # entry point setup
 #------------------------------------
 # Set the entrypoint
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "600", "agent.app:app"]
+CMD ["python", "-m", "agent.run"]
 #==================================================================================================

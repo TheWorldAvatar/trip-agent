@@ -1,5 +1,6 @@
 from flask import Blueprint, request
 from functools import lru_cache
+from agent.jobs.store import jobs
 from agent.utils.ts_client import TimeSeriesClient
 from twa import agentlogging
 import pandas as pd
@@ -29,7 +30,7 @@ def api():
     upperbound = request.args.get('upperbound')
     lowerbound = request.args.get('lowerbound')
 
-    return process_trajectories([iri], lowerbound, upperbound, iri)
+    return queue_job({'point_iris': [iri], 'lowerbound': lowerbound, 'upperbound': upperbound})
 
 
 @process_trajectory_bp.route(TIMELINE_ROUTE, methods=['POST'])
@@ -41,18 +42,35 @@ def process_trajectory_for_timeline():
         logger.warning(str(ex))
         return str(ex), 401, {'WWW-Authenticate': 'Bearer'}
 
-    kg_client = KgClient()
-    point_iris = kg_client.get_point_iris(user_id)
-    if not point_iris:
-        return 'No trajectory points found for authenticated user', 404
+    return queue_job({
+        'lowerbound': request.args.get('lowerbound'),
+        'upperbound': request.args.get('upperbound'),
+    }, owner_id=user_id)
 
-    return process_trajectories(
-        point_iris,
-        request.args.get('lowerbound'),
-        request.args.get('upperbound'),
-        user_id,
-        kg_client=kg_client,
-    )
+
+def queue_job(payload, owner_id=None):
+    job_id = jobs.enqueue(payload, owner_id=owner_id)
+    logger.info('Queued trip job %s', job_id)
+    response = {'job_id': job_id, 'status': 'queued'}
+    if owner_id is not None:
+        response['status_url'] = 'jobs/active'
+    return response, 202
+
+
+@process_trajectory_bp.route('/jobs/active', methods=['GET'])
+def active_jobs():
+    try:
+        user_id = get_authenticated_user_id(request.headers.get('Authorization'))
+    except AuthenticationError as ex:
+        return {'error': str(ex)}, 401, {'WWW-Authenticate': 'Bearer'}
+    public_jobs = []
+    for job in jobs.active_for_owner(user_id):
+        public = {key: value for key, value in job.items() if key != 'owner_id'}
+        for key in ('created_at', 'started_at', 'finished_at', 'heartbeat_at'):
+            if public.get(key) is not None:
+                public[key] = public[key].isoformat()
+        public_jobs.append(public)
+    return public_jobs
 
 
 class AuthenticationError(Exception):
@@ -95,9 +113,10 @@ def get_authenticated_user_id(authorization_header):
 
 
 def process_trajectories(point_iris, lowerbound, upperbound, participant_id,
-                         kg_client=None):
+                         kg_client=None, update_timeline_table=False, progress=None):
     """Detect one trajectory across several point time series and persist per point."""
     kg_client = kg_client or KgClient()
+    progress = progress or (lambda stage: None)
     trajectory_frames = []
 
     for point_iri in point_iris:
@@ -110,6 +129,7 @@ def process_trajectories(point_iris, lowerbound, upperbound, participant_id,
             point_lowerbound = kg_client.convert_input_time_for_timeseries(
                 time=lowerbound, point_iri=point_iri)
 
+        progress('reading_trajectory')
         logger.info('Querying time series data for %s', point_iri)
         dataframe, _, time_list_for_java = kg_client.get_trajectory_time_series(
             point_iri=point_iri,
@@ -141,6 +161,7 @@ def process_trajectories(point_iris, lowerbound, upperbound, participant_id,
         "utm_e": "utm_e"
     }
 
+    progress('detecting_trips')
     logger.info('Running trip detection code')
 
     try:
@@ -156,6 +177,7 @@ def process_trajectories(point_iris, lowerbound, upperbound, participant_id,
         logger.error(err_msg)
         raise
 
+    progress('uploading_trip_time_series')
     for point_iri, point_data in detected_gps.groupby('_point_iri', sort=False):
         time_series_client = TimeSeriesClient(point_iri)
         trip = kg_client.get_trip(point_iri)
@@ -179,6 +201,27 @@ def process_trajectories(point_iris, lowerbound, upperbound, participant_id,
             values=[trip_list_int],
         )
         time_series_client.add_time_series(time_series=time_series_trip_visit)
+
+    logger.info('Finished uploading trip time series for %d trajectories (%d points)',
+                len(point_iris), len(detected_gps))
+    if update_timeline_table:
+        progress('publishing_timeline_trips')
+        logger.info('Preparing shared-table trip assignments for %d points', len(detected_gps))
+        # One transaction publishes the completed result across all trajectories.
+        assignments = []
+        for point_iri, point_data in detected_gps.groupby('_point_iri', sort=False):
+            for source_time, original_time, trip_index in zip(
+                    point_data['_source_time'], point_data['_time_for_java'],
+                    point_data[CH_TRIP_INDEX]):
+                if pd.isna(source_time):
+                    if isinstance(original_time, JavaObject):
+                        source_time = int(original_time.toEpochMilli()) / 1000.0
+                    else:
+                        source_time = original_time
+                assignments.append((point_iri, float(source_time), int(trip_index)))
+        logger.info('Prepared %d trip assignments; publishing to trajectory_points', len(assignments))
+        postgis_client.update_timeline_trips(assignments)
+        logger.info('Shared-table trip publication completed: %d points', len(assignments))
 
     return 'Added trip data'
 

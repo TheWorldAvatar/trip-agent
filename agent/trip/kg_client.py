@@ -9,6 +9,7 @@ from agent.trip.utilities import wgs_to_utm_code
 import requests
 from urllib.parse import urlsplit
 from agent.utils.env_configs import NAMESPACE
+from agent.utils.query_ranges import fetch_time_series_rows
 
 PREFIX = 'https://www.theworldavatar.com/kg/ontoexposure/'
 TRIP = PREFIX + 'Trip'
@@ -130,27 +131,24 @@ class KgClient():
                 condition = f"""?time_number <= {upperbound}"""
             conditions.append(condition)
 
-        filter_clause = ''
-        if conditions:
-            filter_clause = f"FILTER ({' && '.join(conditions)})"
-
-        query = f"""
+        prefix = """
         PREFIX time: <http://www.w3.org/2006/time#>
         PREFIX timeseries: <https://www.theworldavatar.com/kg/ontotimeseries/>
         PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-        SELECT ?timestamp ?time_number ?val
-        WHERE {{
+        """
+        pattern = f"""
             ?obs timeseries:observationOf <{point_iri}>;
                 timeseries:hasResult/timeseries:hasValue ?val.
             OPTIONAL {{?obs time:hasTime/time:inXSDDateTime ?timestamp.}}
             OPTIONAL {{?obs time:hasTime/time:inTimePosition/time:numericPosition ?time_number.}}
-            {filter_clause}
-        }}
-        ORDER BY ?timestamp ?time_number
         """
 
-        query_results = self.remote_store_client.executeQuery(query)
-        query_results_parsed = json.loads(query_results.toString())
+        def execute(query):
+            result = self.remote_store_client.executeQuery(query)
+            return json.loads(result.toString())
+
+        query_results_parsed = fetch_time_series_rows(
+            execute, prefix, pattern, conditions)
 
         if len(query_results_parsed) == 0:
             return pd.DataFrame(), None, []
@@ -163,8 +161,7 @@ class KgClient():
         for row in query_results_parsed:
             if 'timestamp' in row:
                 timestamp_list_as_string.append(row['timestamp'])
-            if 'time_number' in row:
-                timenumber_list_as_string.append(row['time_number'])
+            timenumber_list_as_string.append(row.get('time_number'))
 
             point = wkt.loads(row['val'])
             lon.append(point.x)
@@ -187,7 +184,14 @@ class KgClient():
             time_list_for_java = self.convert_input_time_for_timeseries(
                 time=timenumber_list_as_string, point_iri=point_iri)
 
-        return pd.DataFrame({'utc_date': timestamps, 'lat': lat, 'lon': lon}), utm_code, time_list_for_java
+        dataframe = pd.DataFrame({
+            'utc_date': timestamps,
+            'lat': lat,
+            'lon': lon,
+            '_source_time': [float(value) if value is not None else None
+                             for value in timenumber_list_as_string],
+        })
+        return dataframe, utm_code, time_list_for_java
 
     def convert_input_time_for_timeseries(self, time, point_iri: str):
         # assumes time is in seconds or milliseconds, if an exception is thrown,

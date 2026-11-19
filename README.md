@@ -17,6 +17,8 @@ It is assumed that time series data is instantiated using <https://github.com/Th
 - KEYCLOAK_REALM
   - Name of the Keycloak realm that issues access tokens to timeline users.
   - Required by the authenticated `process_trajectory_for_timeline` route.
+- TRIP_WORKER_CONCURRENCY
+  - Sets the number of parallel calculations allowed
 
 This agent processes time series of points to produce trips and visits. It is designed to be deployed on <https://github.com/TheWorldAvatar/hd4-stack>.
 
@@ -24,7 +26,7 @@ This agent processes time series of points to produce trips and visits. It is de
 
 ### `process_trajectory` (POST)
 
-This route remains unauthenticated and processes one point IRI supplied by the caller.
+This route remains unauthenticated and queues processing for one point IRI supplied by the caller.
 
 - Assuming this is spun up as a container within a stack using the this config <https://github.com/TheWorldAvatar/hd4-stack/blob/main/stack-manager/inputs/config/services/trip-agent.json>, the agent accepts requests in the following form
 
@@ -50,7 +52,7 @@ This route remains unauthenticated and processes one point IRI supplied by the c
 
 ### `process_trajectory_for_timeline` (POST)
 
-This route processes all point trajectories belonging to the authenticated timeline user. The point IRIs are resolved from the `sub` claim of a Keycloak access token, so callers do not supply an `iri` parameter.
+This route queues processing for all point trajectories belonging to the authenticated timeline user. The worker resolves point IRIs from the verified token subject when execution starts; callers do not supply an `iri` parameter. The token itself is not persisted.
 
 The request must include the access token as a bearer credential:
 
@@ -156,3 +158,13 @@ and use <https://github.com/TheWorldAvatar/hd4-stack/blob/main/stack-manager/inp
         ]
     }
 ```
+
+## Shared timeline trajectory table
+
+Only POST /process_trajectory_for_timeline also publishes detected trip indices to public.trajectory_points. Its main purpose is to improve efficiency of timeline's GeoServer layers.
+
+## Background trip jobs (in memory)
+
+Both POST routes return HTTP 202 with job_id and status. Timeline submissions also
+return status_url (jobs/active), relative to the POST endpoint's directory.
+Poll GET /jobs/active under the same trip-agent base URL with a valid bearer token.
