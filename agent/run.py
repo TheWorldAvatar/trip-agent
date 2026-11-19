@@ -4,6 +4,8 @@ import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
+
 from agent.jobs.store import start_queue_server
 
 
@@ -11,6 +13,10 @@ def main():
     worker_count = int(os.environ.get('TRIP_WORKER_CONCURRENCY', '4'))
     if worker_count < 1:
         raise ValueError('TRIP_WORKER_CONCURRENCY must be a positive integer')
+
+    # twa 0.0.10 can race to create this directory during concurrent imports.
+    (Path.home() / '.twa' / 'logs').mkdir(parents=True, exist_ok=True)
+
     stopping = False
 
     def stop(signum, frame):

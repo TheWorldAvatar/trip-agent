@@ -1,5 +1,6 @@
 from agent.utils.stack_gateway import stack_clients_view
 from agent.utils.stack_configs import BLAZEGRAPH_URL, STACK_OUTGOING
+import time
 import uuid
 import json
 from py4j.java_gateway import JavaObject
@@ -9,7 +10,7 @@ from agent.trip.utilities import wgs_to_utm_code
 import requests
 from urllib.parse import urlsplit
 from agent.utils.env_configs import NAMESPACE
-from agent.utils.query_ranges import fetch_time_series_rows
+from agent.utils.query_ranges import fetch_time_series_rows, is_range_failure
 
 PREFIX = 'https://www.theworldavatar.com/kg/ontoexposure/'
 TRIP = PREFIX + 'Trip'
@@ -22,8 +23,8 @@ ONTODEVICE_NAMESPACE = 'https://www.theworldavatar.com/kg/ontodevice/'
 
 class KgClient():
     def __init__(self):
-        self.remote_store_client = stack_clients_view.RemoteStoreClient(
-            STACK_OUTGOING, BLAZEGRAPH_URL)
+        self.remote_store_client = RetryRemoteStoreClient(
+            stack_clients_view.RemoteStoreClient(STACK_OUTGOING, BLAZEGRAPH_URL))
 
         # check if namespace exists, if not initialise
         r = requests.head(BLAZEGRAPH_URL)
@@ -144,7 +145,8 @@ class KgClient():
         """
 
         def execute(query):
-            result = self.remote_store_client.executeQuery(query)
+            result = self.remote_store_client.executeQuery(
+                query, split_on_failure=True)
             return json.loads(result.toString())
 
         query_results_parsed = fetch_time_series_rows(
@@ -206,3 +208,27 @@ class KgClient():
         except (ValueError, TypeError):
             class_name = self.get_java_time_class(point_iri)
             return stack_clients_view.TimeSeriesClientFactory.timestampFactory(class_name, time)
+
+
+class RetryRemoteStoreClient:
+    def __init__(self, java_client, max_retries=3, delay=10):
+        self.java_client = java_client
+        self.max_retries = max_retries
+        self.delay = delay
+
+    def executeQuery(self, query, *, split_on_failure=False):
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                return self.java_client.executeQuery(query)
+            except Exception as e:
+                # The time-series caller handles interrupted responses by splitting.
+                if split_on_failure and is_range_failure(e):
+                    raise
+                print(f"Attempt {attempt} failed: {e}")
+                if attempt == self.max_retries:
+                    raise
+                time.sleep(self.delay)
+
+    # forward other methods if needed
+    def __getattr__(self, name):
+        return getattr(self.java_client, name)
