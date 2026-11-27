@@ -16,6 +16,7 @@ class JobStore:
     def __init__(self):
         self._jobs = {}
         self._pending = deque()
+        self._running_owners = set()
         self._lock = threading.RLock()
 
     def initialize(self):
@@ -51,12 +52,18 @@ class JobStore:
 
     def claim(self, worker_id):
         with self._lock:
-            if not self._pending:
-                return None
-            job = self._jobs[self._pending.popleft()]
-            job.update(status='running', stage='starting', worker_id=str(worker_id),
-                       started_at=now(), heartbeat_at=now())
-            return deepcopy({k: job[k] for k in ('id', 'owner_id', 'payload')})
+            for index, job_id in enumerate(self._pending):
+                job = self._jobs[job_id]
+                owner_id = job['owner_id']
+                if owner_id in self._running_owners:
+                    continue
+                del self._pending[index]
+                job.update(status='running', stage='starting', worker_id=str(worker_id),
+                           started_at=now(), heartbeat_at=now())
+                if owner_id is not None:
+                    self._running_owners.add(owner_id)
+                return deepcopy({k: job[k] for k in ('id', 'owner_id', 'payload')})
+            return None
 
     def heartbeat(self, job_id, worker_id):
         self._change(job_id, worker_id, heartbeat_at=now())
@@ -76,6 +83,8 @@ class JobStore:
             job = self._jobs.get(str(job_id))
             if job and job['status'] == 'running' and job['worker_id'] == str(worker_id):
                 job.update(changes)
+                if job['status'] in ('succeeded', 'failed'):
+                    self._running_owners.discard(job['owner_id'])
 
 
 _store = JobStore()
