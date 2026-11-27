@@ -1,5 +1,6 @@
 from agent.utils.stack_gateway import stack_clients_view
 from agent.utils.stack_configs import BLAZEGRAPH_URL, STACK_OUTGOING
+import time
 import uuid
 import json
 from py4j.java_gateway import JavaObject
@@ -9,6 +10,7 @@ from agent.trip.utilities import wgs_to_utm_code
 import requests
 from urllib.parse import urlsplit
 from agent.utils.env_configs import NAMESPACE
+from agent.utils.query_ranges import fetch_time_series_rows, is_range_failure
 
 PREFIX = 'https://www.theworldavatar.com/kg/ontoexposure/'
 TRIP = PREFIX + 'Trip'
@@ -21,8 +23,8 @@ ONTODEVICE_NAMESPACE = 'https://www.theworldavatar.com/kg/ontodevice/'
 
 class KgClient():
     def __init__(self):
-        self.remote_store_client = stack_clients_view.RemoteStoreClient(
-            STACK_OUTGOING, BLAZEGRAPH_URL)
+        self.remote_store_client = RetryRemoteStoreClient(
+            stack_clients_view.RemoteStoreClient(STACK_OUTGOING, BLAZEGRAPH_URL))
 
         # check if namespace exists, if not initialise
         r = requests.head(BLAZEGRAPH_URL)
@@ -130,27 +132,25 @@ class KgClient():
                 condition = f"""?time_number <= {upperbound}"""
             conditions.append(condition)
 
-        filter_clause = ''
-        if conditions:
-            filter_clause = f"FILTER ({' && '.join(conditions)})"
-
-        query = f"""
+        prefix = """
         PREFIX time: <http://www.w3.org/2006/time#>
         PREFIX timeseries: <https://www.theworldavatar.com/kg/ontotimeseries/>
         PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-        SELECT ?timestamp ?time_number ?val
-        WHERE {{
+        """
+        pattern = f"""
             ?obs timeseries:observationOf <{point_iri}>;
                 timeseries:hasResult/timeseries:hasValue ?val.
             OPTIONAL {{?obs time:hasTime/time:inXSDDateTime ?timestamp.}}
             OPTIONAL {{?obs time:hasTime/time:inTimePosition/time:numericPosition ?time_number.}}
-            {filter_clause}
-        }}
-        ORDER BY ?timestamp ?time_number
         """
 
-        query_results = self.remote_store_client.executeQuery(query)
-        query_results_parsed = json.loads(query_results.toString())
+        def execute(query):
+            result = self.remote_store_client.executeQuery(
+                query, split_on_failure=True)
+            return json.loads(result.toString())
+
+        query_results_parsed = fetch_time_series_rows(
+            execute, prefix, pattern, conditions)
 
         if len(query_results_parsed) == 0:
             return pd.DataFrame(), None, []
@@ -163,8 +163,7 @@ class KgClient():
         for row in query_results_parsed:
             if 'timestamp' in row:
                 timestamp_list_as_string.append(row['timestamp'])
-            if 'time_number' in row:
-                timenumber_list_as_string.append(row['time_number'])
+            timenumber_list_as_string.append(row.get('time_number'))
 
             point = wkt.loads(row['val'])
             lon.append(point.x)
@@ -187,7 +186,14 @@ class KgClient():
             time_list_for_java = self.convert_input_time_for_timeseries(
                 time=timenumber_list_as_string, point_iri=point_iri)
 
-        return pd.DataFrame({'utc_date': timestamps, 'lat': lat, 'lon': lon}), utm_code, time_list_for_java
+        dataframe = pd.DataFrame({
+            'utc_date': timestamps,
+            'lat': lat,
+            'lon': lon,
+            '_source_time': [float(value) if value is not None else None
+                             for value in timenumber_list_as_string],
+        })
+        return dataframe, utm_code, time_list_for_java
 
     def convert_input_time_for_timeseries(self, time, point_iri: str):
         # assumes time is in seconds or milliseconds, if an exception is thrown,
@@ -202,3 +208,27 @@ class KgClient():
         except (ValueError, TypeError):
             class_name = self.get_java_time_class(point_iri)
             return stack_clients_view.TimeSeriesClientFactory.timestampFactory(class_name, time)
+
+
+class RetryRemoteStoreClient:
+    def __init__(self, java_client, max_retries=3, delay=10):
+        self.java_client = java_client
+        self.max_retries = max_retries
+        self.delay = delay
+
+    def executeQuery(self, query, *, split_on_failure=False):
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                return self.java_client.executeQuery(query)
+            except Exception as e:
+                # The time-series caller handles interrupted responses by splitting.
+                if split_on_failure and is_range_failure(e):
+                    raise
+                print(f"Attempt {attempt} failed: {e}")
+                if attempt == self.max_retries:
+                    raise
+                time.sleep(self.delay)
+
+    # forward other methods if needed
+    def __getattr__(self, name):
+        return getattr(self.java_client, name)
